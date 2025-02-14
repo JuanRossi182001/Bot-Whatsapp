@@ -2,4 +2,6 @@
 *.env
 variables.env
 prendertodo.txt
-__pycache__
+# Ignorar carpetas __pycache__
+__pycache__/
+*/__pycache__/
