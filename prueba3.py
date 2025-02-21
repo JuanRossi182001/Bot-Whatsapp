@@ -49,19 +49,21 @@ async def bot_webhook(request: Request):
         await bot_service.handle_register_user_stage(session=session, response=response, message_body=message_body, from_number=from_number)
     elif session.stage == "select_doctor":
         await bot_service.handle_select_doctor_stage(session=session, response=response, message_body=message_body, from_number=from_number)
-    elif session.stage == "choose_day":  # 🚨 ¡NUEVA CONDICIÓN!
+    elif session.stage == "choose_day":  
         await bot_service.handle_select_doctor_stage(session=session, response=response, message_body=message_body, from_number=from_number)
-    elif session.stage == "choose_slot": # 🚨 ¡NUEVA CONDICIÓN!
+    elif session.stage == "choose_slot": 
         await bot_service.handle_select_doctor_stage(session=session, response=response, message_body=message_body, from_number=from_number)  
     elif session.stage == "choose_schedule":
-        bot_service.handle_choose_schedule_stage(session=session, response=response, message_body=message_body)
-    
-    # user_sessions[from_number] = session
+        bot_service.handle_choose_schedule_stage(session=session, response=response, message_body=message_body) 
+    elif session.stage == "confirm_appointment":
+        await bot_service.save_appointment(session=session, response=response)
+        
+
     
     # 3. Guardar la sesión actualizada en Redis (TTL de 24 horas)
     redis_client.save_session(from_number, session.to_dict())
     
-    message_text = str(response) #.split('<Message>')[1].split('</Message>')[0]
+    message_text = str(response).split('<Message>')[1].split('</Message>')[0]
     
     # Enviar el mensaje usando Twilio
     bot_service.send_twilio_message(from_number, message_text)

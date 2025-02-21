@@ -4,6 +4,7 @@ from typing import List
 from twilio.twiml.messaging_response import MessagingResponse
 from datetime import datetime, timedelta
 from models.session import Session
+from fastapi import HTTPException
 
 class BotService:
     def __init__(self,twilio_phone_number):
@@ -168,8 +169,8 @@ class BotService:
                 response.message("❌ No hay slots disponibles para este día.")
                 return
 
-            session.slots = slots  # 🚨 Guardar slots en la sesión
-            session.stage = "choose_slot"  # 🚨 Actualizar el stage
+            session.slots = slots  
+            session.stage = "choose_slot"  
 
             print(f"Selected Schedule: {selected_schedule}")
             print(f"Slots generados: {slots}")
@@ -179,7 +180,7 @@ class BotService:
             response.message(f"🕒 Slots disponibles para el {selected_schedule['day']}:\n{slots_text}\nResponde con el número del slot que deseas.")
 
         except Exception as e:
-            print(f"🔥 Error en handle_day_selection: {str(e)}")
+            print(f"Error en handle_day_selection: {str(e)}")
             response.message("❌ Ocurrió un error. Por favor, intenta de nuevo.")
 
 
@@ -193,12 +194,90 @@ class BotService:
                 selected_slot = slots[selected_slot_index]
                 session.selected_slot = selected_slot
                 session.stage = "confirm_appointment"
-                response.message(f"Has seleccionado el slot: {selected_slot}.\nResponde 'confirmar' para agendar la cita.")
+                response.message(f"Has seleccionado el slot: {selected_slot}.")
             else:
                 response.message("Número de slot no válido. Por favor, intenta de nuevo.")
         else:
             response.message("Por favor, responde con el número del slot que deseas.")
-            
+
+
+
+    def format_appointment_message(self, appointment: dict) -> str:
+        appointment_date = datetime.fromisoformat(appointment["date"])
+        formatted_date = appointment_date.strftime("%d/%m/%Y a las %I:%M %p")  # Ejemplo: 07/01/2025 a las 06:30 AM
+
+        # Crear el mensaje formateado
+        message = (
+            "✅ *Cita confirmada* ✅\n\n"
+            f"📅 *Fecha y hora:* {formatted_date}\n"
+            f"🆔 *ID de la cita:* {appointment['id']}\n"
+            f"📝 *Motivo:* {appointment['reason']}"
+        )
+
+        return message
         
-        
-        
+
+
+    async def save_appointment(self, session: Session,response: MessagingResponse) -> None:
+            try:
+                # obtengo los datos necesarios para crear un appointment
+                user_id = session.user_id
+                doctor_id = session.doctor_id
+                selected_slot = session.selected_slot # Ejemplo: "06:00 - 06:30"
+                selected_schedule = session.selected_schedule # Contiene el día y horario entre otras cosas
+                
+                if not all([user_id, doctor_id, selected_slot, selected_schedule]):
+                    raise ValueError("Faltan datos para crear la cita.")
+                
+                
+                # saco la fecha de selected_schedule
+                appointment_date = datetime.fromisoformat(selected_schedule["start_time"]).date()
+                
+                # convierto el slot a datetime
+                start_time_str = selected_slot.split(" - ")[0]
+                start_time = datetime.strptime(start_time_str, "%H:%M").time()
+                
+                # combino fecha y hora 
+                appointment_datetime = datetime.combine(appointment_date,start_time)
+                
+                
+                # creo el json para el endpoint
+                appointment_data = {
+                    "user_id": user_id,
+                    "date":appointment_datetime.isoformat(),
+                    "doctor_id": doctor_id,
+                    "reason": "consulta nashe"
+                }
+                
+                
+                print(f"Cita a crear: {appointment_data}") # imprimo el json para ver si esta bien appointment_data
+                
+                # llamo al endpoint
+                async with httpx.AsyncClient() as http_client:
+                    response_endpoint = await http_client.post(
+                    "http://localhost:8000/appointments/create",
+                    json=appointment_data
+                    )
+                    
+                    
+                    if response_endpoint.status_code == 409:
+                        raise HTTPException(status_code=409,detail=response.json()["detail"])
+                    response_endpoint.raise_for_status()
+                    
+                    session.appointments = response_endpoint.json()
+                    
+                    
+                    confirmation_message = self.format_appointment_message(session.appointments)
+                    
+                    response.message(confirmation_message)
+                
+                
+            except HTTPException as e:
+                response.message(f"❌ Error: {e.detail}")
+            except Exception as e:
+                print(f"Error no esperado: {e}")  
+                response.message("❌ Ocurrió un error al confirmar la cita.")
+                    
+                
+                    
+                    

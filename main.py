@@ -1,6 +1,5 @@
 from fastapi import FastAPI
 from routers import appointment,schedule,doctor,user
-import prueba2
 import prueba3
 app = FastAPI()
 app.include_router(appointment.router, prefix="/appointments", tags=["appointments"])
