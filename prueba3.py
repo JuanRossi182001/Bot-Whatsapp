@@ -53,8 +53,8 @@ async def bot_webhook(request: Request):
         await bot_service.handle_select_doctor_stage(session=session, response=response, message_body=message_body, from_number=from_number)
     elif session.stage == "choose_slot": 
         await bot_service.handle_select_doctor_stage(session=session, response=response, message_body=message_body, from_number=from_number)  
-    elif session.stage == "choose_schedule":
-        bot_service.handle_choose_schedule_stage(session=session, response=response, message_body=message_body) 
+    elif session.stage == "get_reason":
+        bot_service.get_reason(session=session, response=response, message_body=message_body)
     elif session.stage == "confirm_appointment":
         await bot_service.save_appointment(session=session, response=response)
         

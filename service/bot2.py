@@ -68,7 +68,7 @@ class BotService:
         except Exception as e:
             print(f"Error: {e}")
             response.message("Ocurrió un error al procesar tu solicitud.")
-
+    
     async def handle_choose_schedule_stage(self, session: dict, response: MessagingResponse, message_body: str) -> None:
         try:
             schedule_choice = int(message_body) - 1
@@ -95,14 +95,14 @@ class BotService:
                 response.message("Por favor, selecciona un número de horario válido.")
         except (ValueError, IndexError):
             response.message("Por favor, selecciona un número de horario válido.")
-
+    
     def send_twilio_message(self, to_number: str, message_body: str) -> None:
         self.client.messages.create(  
             to=to_number,
             from_=self.twilio_phone_number,
             body=message_body
         )
-        
+                
 
     def generate_time_slots(self, start_time: datetime, end_time: datetime, slot_duration_minutes: int = 30) -> List[str]:
         slots = []
@@ -193,7 +193,7 @@ class BotService:
             if 0 <= selected_slot_index < len(slots):
                 selected_slot = slots[selected_slot_index]
                 session.selected_slot = selected_slot
-                session.stage = "confirm_appointment"
+                session.stage = "get_reason"
                 response.message(f"Has seleccionado el slot: {selected_slot}.")
             else:
                 response.message("Número de slot no válido. Por favor, intenta de nuevo.")
@@ -246,7 +246,7 @@ class BotService:
                     "user_id": user_id,
                     "date":appointment_datetime.isoformat(),
                     "doctor_id": doctor_id,
-                    "reason": "consulta nashe"
+                    "reason": session.reason
                 }
                 
                 
@@ -279,5 +279,8 @@ class BotService:
                 response.message("❌ Ocurrió un error al confirmar la cita.")
                     
                 
-                    
-                    
+    def get_reason(self, session: Session, response: MessagingResponse, message_body: str) -> None:
+        response.message("Por favor, responde con el motivo de la cita.")
+        session.reason = message_body
+        session.stage = "confirm_appointment"
+        

@@ -15,7 +15,6 @@ class AdminResp(BaseModel):
     id: Optional[int]
     name: str
     email: EmailStr
-    password: str
     
     class Config:
         from_attributes = True

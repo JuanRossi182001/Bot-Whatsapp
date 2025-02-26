@@ -12,7 +12,8 @@ class Session:
         selected_schedule: Optional[Dict] = None,
         slots: Optional[List[str]] = None,
         selected_slot: Optional[str] = None,
-        appointments: Optional[List[Dict]] = None
+        appointments: Optional[List[Dict]] = None,
+        reason: Optional[str] = None
     ):
         self.user_id = user_id
         self.doctor_id = doctor_id
@@ -24,6 +25,7 @@ class Session:
         self.slots = slots
         self.selected_slot = selected_slot
         self.appointments = appointments
+        self.reason = reason
 
     def to_dict(self) -> dict:
         """Convierte la sesión a un diccionario compatible con Redis."""
@@ -37,7 +39,8 @@ class Session:
             "selected_schedule": self.selected_schedule,
             "slots": self.slots,
             "selected_slot": self.selected_slot,
-            "appointments": self.appointments
+            "appointments": self.appointments,
+            "reason": self.reason
         }
 
     @classmethod
@@ -53,5 +56,6 @@ class Session:
             selected_schedule=data.get("selected_schedule"),
             slots=data.get("slots"),
             selected_slot=data.get("selected_slot"),
-            appointments=data.get("appointments")
+            appointments=data.get("appointments"),
+            reason=data.get("reason")
         )

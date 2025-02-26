@@ -23,6 +23,7 @@ from models.user import User
 from models.appointment import Appointment
 from models.doctor import Doctor
 from models.schedule import Schedule
+from models.admin import Admin
 target_metadata = base.metadata
 
 # other values from the config, defined by the needs of env.py,
