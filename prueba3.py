@@ -43,6 +43,8 @@ async def bot_webhook(request: Request):
     # 2. Lógica del bot 
     if session.stage == "greet":
         bot_service.handle_greet_stage(session=session, response=response)
+    elif session.stage == "ask_dni":
+        bot_service.handle_ask_dni_stage(session=session, response=response, message_body=message_body)
     elif session.stage == "ask_email":
         bot_service.handle_ask_email_stage(session=session, response=response, message_body=message_body)
     elif session.stage == "register_user":

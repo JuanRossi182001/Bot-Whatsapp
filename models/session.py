@@ -7,6 +7,7 @@ class Session:
         doctor_id: Optional[int] = None,
         name: Optional[str] = None,
         email: Optional[str] = None,
+        dni: Optional[str] = None,
         stage: Optional[str] = None,
         schedules: Optional[List[Dict]] = None,
         selected_schedule: Optional[Dict] = None,
@@ -19,6 +20,7 @@ class Session:
         self.doctor_id = doctor_id
         self.name = name
         self.email = email
+        self.dni = dni
         self.stage = stage or "greet"  # Valor por defecto
         self.schedules = schedules
         self.selected_schedule = selected_schedule
@@ -34,6 +36,7 @@ class Session:
             "doctor_id": self.doctor_id,
             "name": self.name,
             "email": self.email,
+            "dni": self.dni,
             "stage": self.stage,
             "schedules": self.schedules,
             "selected_schedule": self.selected_schedule,
@@ -51,6 +54,7 @@ class Session:
             doctor_id=data.get("doctor_id"),
             name=data.get("name"),
             email=data.get("email"),
+            dni=data.get("dni"),
             stage=data.get("stage"),
             schedules=data.get("schedules"),
             selected_schedule=data.get("selected_schedule"),

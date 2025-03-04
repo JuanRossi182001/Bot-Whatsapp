@@ -24,10 +24,19 @@ def get_by_id(user_id: int, service: dependency):
 # create user
 @router.post("/create")
 def create_user(user: UserSch, service: dependency):
-    if service.user_exist(email=user.email, name=user.name):
-        return service.user_exist(email=user.email, name=user.name)
-    _user = service.create(obj_in=user)
-    return _user
+    
+    existing_user = service.user_exist(email=user.email, dni=user.dni)
+    
+    if existing_user:
+        return existing_user
+    elif existing_user is None:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Error al registrar el usuario. El email no coincide con el Dni. Por favor, ingresa el Dni nuevamente.")
+    else:
+        _user = service.create(obj_in=user)
+        return _user
+        
+    
+    
 
 
 # delete user

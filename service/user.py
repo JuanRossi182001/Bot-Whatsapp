@@ -10,10 +10,21 @@ class UserService(CRUDService[User, UserSch, UserResp]):
         super().__init__(model=User, response_schema=UserResp,db=db)
         
         
-    def user_exist(self, email: str, name: str) -> bool:
-        if self.db.query(User).filter(email == User.email).filter(name == User.name).first():
-            _user = self.db.query(User).filter(email == User.email).filter(name == User.name).first()
-            return _user
-        return False
+    def user_exist(self, email: str, dni: str) -> dict:
+    # Buscar usuario por DNI
+        user_by_dni = self.db.query(User).filter(User.dni == dni).first()
+        
+        # Buscar usuario por email
+        user_by_email = self.db.query(User).filter(User.email == email).first()
+        
+        if user_by_dni and user_by_email and user_by_dni.id == user_by_email.id:
+            # El DNI y el email están registrados y corresponden al mismo usuario
+            return user_by_dni
+        elif user_by_dni:
+            # El DNI está registrado, pero el email no coincide
+            return None
+        else:
+            # El DNI no está registrado
+            return False
         
     

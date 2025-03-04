@@ -12,17 +12,33 @@ class BotService:
         self.twilio_phone_number = twilio_phone_number
 
     def handle_greet_stage(self, session:Session, response: MessagingResponse) -> None:
-        response.message("Hola, ¿cómo te llamas?")
-        session.stage = "ask_email"
+        response.message("Hola, soy tu asistente virtual. Para comenzar, ¿cuál es tu nombre completo?")
+        session.stage = "ask_dni"
+        
+    def handle_ask_dni_stage(self, session: Session, response: MessagingResponse, message_body: str) -> None:
+        session.name = message_body.strip()  # Guardar el nombre en la sesión
+        response.message(f"Gracias, {session.name}. Por favor, envíame tu DNI (solo los 8 números).")
+        session.stage = "ask_email"  # Pasar a la siguiente etapa
         
     def handle_ask_email_stage(self, session: Session, response: MessagingResponse, message_body: str) -> None:
-        session.name = message_body
-        response.message(f"Gracias, {message_body}. Por favor, envíame tu correo electrónico.")
-        session.stage = "register_user"
+        dni = message_body.strip()
+    
+        # Validar que el DNI tenga 8 dígitos
+        if dni.isdigit() and len(dni) == 8:
+            session.dni = dni  # Guardar el DNI en la sesión
+            response.message("Por favor, envíame tu correo electrónico.")
+            session.stage = "register_user"  # Pasar a la siguiente etapa
+        else:
+            response.message("El DNI debe tener exactamente 8 dígitos. Por favor, inténtalo de nuevo.")
 
     async def handle_register_user_stage(self, session: Session, response: MessagingResponse, message_body: str, from_number: str) -> None:
-        session.email = message_body
-        user_data = {"name": session.name, "email": session.email}
+        session.email = message_body.strip().lower()
+        
+        user_data = {
+        "name": session.name,
+        "email": session.email,
+        "dni": session.dni
+        }
         
         async with httpx.AsyncClient() as http_client:
             r = await http_client.post("http://localhost:8000/users/create", json=user_data)
@@ -31,13 +47,19 @@ class BotService:
                 user_response = r.json()
                 user_id = user_response.get("id")
                 session.user_id = user_id
-                response.message("Usuario registrado con éxito.")
+                response.message("Usuario registrado con éxito. Ahora elige un médico.")
                 session.stage = "select_doctor"
                 self.send_twilio_message(from_number, "Usuario registrado con éxito.")
                 await self.send_doctor_list(response, from_number)
+            elif r.status_code == 400:
+            # Error en la validación (DNI ya registrado pero email no coincide)
+                error_message = r.json().get("detail", "Error al registrar el usuario. Por favor, ingresa el email nuevamente.")
+                response.message(error_message)
+                session.stage = "ask_email"  # Volver a pedir el email
             else:
-                self.send_twilio_message(from_number, f"Error al registrar el usuario: {r.text}")
-                session.stage = "greet"
+                # Otros errores (por ejemplo, problemas de conexión o errores del servidor)
+                response.message("Hubo un error al procesar tu solicitud. Por favor, inténtalo de nuevo más tarde.")
+                session.stage = "greet"  # Reiniciar el proceso
 
     async def send_doctor_list(self, response, from_number: str) -> None:
         async with httpx.AsyncClient() as http_client:
