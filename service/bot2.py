@@ -188,7 +188,7 @@ class BotService:
             slots = self.generate_time_slots(start_time, end_time)
 
             if not slots:
-                response.message("❌ No hay slots disponibles para este día.")
+                response.message("❌ No hay horarios disponibles para este día.")
                 return
 
             session.slots = slots  
@@ -199,7 +199,7 @@ class BotService:
 
             # Construir mensaje con los slots
             slots_text = "\n".join([f"{i+1}. {slot}" for i, slot in enumerate(slots)])
-            response.message(f"🕒 Slots disponibles para el {selected_schedule['day']}:\n{slots_text}\nResponde con el número del slot que deseas.")
+            response.message(f"🕒 Horarios disponibles para el {selected_schedule['day']}:\n{slots_text}\nResponde con el número del horario que deseas.")
 
         except Exception as e:
             print(f"Error en handle_day_selection: {str(e)}")
@@ -215,12 +215,24 @@ class BotService:
             if 0 <= selected_slot_index < len(slots):
                 selected_slot = slots[selected_slot_index]
                 session.selected_slot = selected_slot
-                session.stage = "get_reason"
-                response.message(f"Has seleccionado el slot: {selected_slot}.")
+                response.message(f"Has seleccionado el slot: {selected_slot}. ¿Confirmas este horario? (Responde 'sí' o 'no').")
+                session.stage = "confirm_slot"  # Nueva etapa para confirmar el slot
             else:
-                response.message("Número de slot no válido. Por favor, intenta de nuevo.")
+                response.message("Número de horario no válido. Por favor, intenta de nuevo.")
         else:
-            response.message("Por favor, responde con el número del slot que deseas.")
+            response.message("Por favor, responde con el número del horario que deseas.")
+            
+            
+    async def handle_confirm_slot(self, session: Session, response: MessagingResponse, message_body: str) -> None:
+        """Maneja la confirmación del slot seleccionado."""
+        if message_body.strip().lower() in ["sí", "si", "s"]:
+            response.message("Horario confirmado. Por favor, indica el motivo de la cita.")
+            session.stage = "get_reason"  # Pasar a la etapa de obtener el motivo
+        elif message_body.strip().lower() in ["no", "n"]:
+            response.message("Por favor, selecciona otro Horario.")
+            session.stage = "choose_slot"  # Volver a la etapa de selección de slot
+        else:
+            response.message("Respuesta no válida. Por favor, responde 'sí' o 'no'.")
 
 
 
@@ -238,7 +250,11 @@ class BotService:
 
         return message
         
-
+    def get_reason(self, session: Session, response: MessagingResponse, message_body: str) -> None:
+        """Maneja la obtención del motivo de la cita."""
+        session.reason = message_body.strip()  # Guardar el motivo en la sesión
+        response.message(f"Motivo de la cita registrado: {session.reason}.")
+        session.stage = "confirm_appointment"  # Pasar a la etapa de confirmación de la cita
 
     async def save_appointment(self, session: Session,response: MessagingResponse) -> None:
             try:
@@ -301,8 +317,5 @@ class BotService:
                 response.message("❌ Ocurrió un error al confirmar la cita.")
                     
                 
-    def get_reason(self, session: Session, response: MessagingResponse, message_body: str) -> None:
-        response.message("Por favor, responde con el motivo de la cita.")
-        session.reason = message_body
-        session.stage = "confirm_appointment"
+    
         
