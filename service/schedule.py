@@ -16,6 +16,10 @@ class ScheduleService(CRUDService[Schedule, ScheduleSch, ScheduleResp]):
     def get_by_doctor(self, doctor_id: int) -> List[ScheduleResp]:
         try:
             _schedules = self.db.query(Schedule).filter(Schedule.doctor_id == doctor_id).all()
+            
+            if not _schedules:
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Schedules not found")
+            
             return [ScheduleResp.model_validate(schedule) for schedule in _schedules]
         except NoResultFound as e:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))

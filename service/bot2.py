@@ -155,6 +155,10 @@ class BotService:
                 session.stage = "choose_day"
                 session.schedules = schedules  # ATENCION POSIBLES ERRORES
                 print(schedules)
+            elif r_schedules.status_code == 404:
+                response.message(f"El Doctor {doctor_id} no tiene horarios disponibles o no existe, elija nuevamente.")
+                await self.send_doctor_list(response, from_number)
+                self.handle_select_doctor_stage(session, response, message_body, from_number)
             else:
                 response.message(f"Error al obtener los horarios: {r_schedules.text}")
 
