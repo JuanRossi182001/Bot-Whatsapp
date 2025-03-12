@@ -12,22 +12,100 @@ class BotService:
         self.twilio_phone_number = twilio_phone_number
 
     def handle_greet_stage(self, session:Session, response: MessagingResponse) -> None:
-        response.message("Hola, soy tu asistente virtual. Para comenzar, ¿cuál es tu nombre completo?")
-        session.stage = "ask_dni"
+        response.message(
+            "Hola, soy tu asistente virtual. ¿Qué deseas hacer?\n"
+            "1. Sacar un nuevo turno.\n"
+            "2. Ver mis futuros turnos."
+        )
+        session.stage = "choose_action"
+        
+        
+    def handle_choose_action(self, session: Session, response: MessagingResponse, message_body: str) -> None:
+        if message_body.strip() == "1":
+            response.message("Vamos a sacar un nuevo turno. Por favor, envíame tu nombre completo.")
+            session.stage = "ask_dni"  
+        elif message_body.strip() == "2":
+            response.message("Vamos a ver tus futuros turnos. Por favor, envíame tu DNI (solo los 8 números).")
+            session.stage = "ask_dni_for_appointments" 
+        else:
+            response.message("Opción no válida. Por favor, responde con '1' o '2'.")
+            
+            
+    async def get_user_id_by_dni(self, dni: str) -> int:
+        async with httpx.AsyncClient() as http_client:
+            r_user = await http_client.get(f"http://localhost:8000/users/dni/{dni}")
+            if r_user.status_code == 200:
+                user_data = r_user.json()
+                return user_data.get("id")
+            else:
+                raise HTTPException(status_code=404, detail=f"Usuario con DNI {dni} no encontrado.")
+            
+            
+            
+    async def handle_ask_dni_for_appointments(self, session: Session, response: MessagingResponse, message_body: str) -> None:
+        dni = message_body.strip()
+
+        # Validar que el DNI tenga 8 dígitos
+        if dni.isdigit() and len(dni) == 8:
+            try:
+                # Obtener el user_id asociado al DNI
+                user_id = await self.get_user_id_by_dni(dni)
+                
+                
+                # Obtener las citas futuras usando el endpoint
+                async with httpx.AsyncClient() as http_client:
+                    r_appointments = await http_client.get(f"http://localhost:8000/appointments/id/{user_id}")
+                    
+                    if r_appointments.status_code == 200:
+                        appointments = r_appointments.json()
+                        if appointments:
+                            # Obtener los nombres de los doctores para cada cita
+                            appointments_with_doctor_names = []
+                            for appointment in appointments:
+                                r_doctor = await http_client.get(f"http://localhost:8000/doctors/{appointment['doctor_id']}")
+                                if r_doctor.status_code == 200:
+                                    doctor_data = r_doctor.json()
+                                    appointment["doctor_name"] = doctor_data.get("name", "Desconocido")
+                                else:
+                                    appointment["doctor_name"] = "Desconocido"
+                                appointments_with_doctor_names.append(appointment)
+
+                            # Formatear las citas para mostrarlas al usuario
+                            appointments_text = "\n".join([
+                                f"📅 Cita {i+1}:\n"
+                                f"📅 Fecha: {appointment['date']}\n"
+                                f"👨🏼‍⚕️ Doctor: {appointment['doctor_name']}\n"
+                                f"📝 Motivo: {appointment['reason']}\n"
+                                for i, appointment in enumerate(appointments_with_doctor_names)
+                            ])
+                            response.message(f"Tus citas futuras:\n{appointments_text}")
+                            response.message("Gracias por usar nuestro servicio.")
+                            session.stage = "greet"
+                        else:
+                            response.message("No tienes citas futuras.")
+                            session.stage = "greet"
+                    else:
+                        response.message("Error al obtener las citas. Por favor, intenta de nuevo.")
+            except HTTPException as e:
+                response.message(f"❌ {e.detail}")
+            except Exception as e:
+                response.message("❌ Ocurrió un error. Por favor, intenta de nuevo.")
+        else:
+            response.message("El DNI debe tener exactamente 8 dígitos. Por favor, inténtalo de nuevo.")
         
     def handle_ask_dni_stage(self, session: Session, response: MessagingResponse, message_body: str) -> None:
-        session.name = message_body.strip()  # Guardar el nombre en la sesión
+        session.name = message_body.strip()  
         response.message(f"Gracias, {session.name}. Por favor, envíame tu DNI (solo los 8 números).")
-        session.stage = "ask_email"  # Pasar a la siguiente etapa
+        session.stage = "ask_email"  
         
     def handle_ask_email_stage(self, session: Session, response: MessagingResponse, message_body: str) -> None:
         dni = message_body.strip()
     
         # Validar que el DNI tenga 8 dígitos
         if dni.isdigit() and len(dni) == 8:
-            session.dni = dni  # Guardar el DNI en la sesión
+            session.dni = dni  
             response.message("Por favor, envíame tu correo electrónico.")
-            session.stage = "register_user"  # Pasar a la siguiente etapa
+            session.stage = "register_user"  
         else:
             response.message("El DNI debe tener exactamente 8 dígitos. Por favor, inténtalo de nuevo.")
 
@@ -57,7 +135,6 @@ class BotService:
                 response.message(error_message)
                 session.stage = "ask_email"  # Volver a pedir el email
             else:
-                # Otros errores (por ejemplo, problemas de conexión o errores del servidor)
                 response.message("Hubo un error al procesar tu solicitud. Por favor, inténtalo de nuevo más tarde.")
                 session.stage = "greet"  # Reiniciar el proceso
 
@@ -110,7 +187,7 @@ class BotService:
                     if r.status_code == 200:
                         appointment = r.json()
                         response.message(f"Cita confirmada para el {appointment['date']} con el Doctor ID: {appointment['doctor_id']}.")
-                        session["stage"] = "greet"  # Reiniciar la conversación
+                        session["stage"] = "greet"  
                     else:
                         response.message(f"Error al crear la cita: {r.text}")
             else:
@@ -153,7 +230,7 @@ class BotService:
                 days_text = "\n".join([f"{i+1}. {schedule['day']}" for i, schedule in enumerate(schedules)])
                 response.message(f"Horarios disponibles para el Doctor {doctor_id}:\n{days_text}\nPor favor, responde con el número del día que deseas.")
                 session.stage = "choose_day"
-                session.schedules = schedules  # ATENCION POSIBLES ERRORES
+                session.schedules = schedules  
                 print(schedules)
             elif r_schedules.status_code == 404:
                 response.message(f"El Doctor {doctor_id} no tiene horarios disponibles o no existe, elija nuevamente.")
@@ -184,7 +261,7 @@ class BotService:
 
             # Obtener el horario seleccionado
             selected_schedule = session.schedules[selected_day_index]
-            session.selected_schedule = selected_schedule  # 🚨 Guardar en la sesión
+            session.selected_schedule = selected_schedule  
 
             # Generar slots de tiempo (30 minutos)
             start_time = datetime.fromisoformat(selected_schedule["start_time"])
@@ -220,7 +297,7 @@ class BotService:
                 selected_slot = slots[selected_slot_index]
                 session.selected_slot = selected_slot
                 response.message(f"Has seleccionado el slot: {selected_slot}. ¿Confirmas este horario? (Responde 'sí' o 'no').")
-                session.stage = "confirm_slot"  # Nueva etapa para confirmar el slot
+                session.stage = "confirm_slot"  
             else:
                 response.message("Número de horario no válido. Por favor, intenta de nuevo.")
         else:
@@ -231,10 +308,10 @@ class BotService:
         """Maneja la confirmación del slot seleccionado."""
         if message_body.strip().lower() in ["sí", "si", "s"]:
             response.message("Horario confirmado. Por favor, indica el motivo de la cita.")
-            session.stage = "get_reason"  # Pasar a la etapa de obtener el motivo
+            session.stage = "get_reason"  
         elif message_body.strip().lower() in ["no", "n"]:
             response.message("Por favor, selecciona otro Horario.")
-            session.stage = "choose_slot"  # Volver a la etapa de selección de slot
+            session.stage = "choose_slot"  
         else:
             response.message("Respuesta no válida. Por favor, responde 'sí' o 'no'.")
 
@@ -242,7 +319,7 @@ class BotService:
 
     def format_appointment_message(self, appointment: dict) -> str:
         appointment_date = datetime.fromisoformat(appointment["date"])
-        formatted_date = appointment_date.strftime("%d/%m/%Y a las %I:%M %p")  # Ejemplo: 07/01/2025 a las 06:30 AM
+        formatted_date = appointment_date.strftime("%d/%m/%Y a las %I:%M %p")  
 
         # Crear el mensaje formateado
         message = (
@@ -256,9 +333,9 @@ class BotService:
         
     def get_reason(self, session: Session, response: MessagingResponse, message_body: str) -> None:
         """Maneja la obtención del motivo de la cita."""
-        session.reason = message_body.strip()  # Guardar el motivo en la sesión
+        session.reason = message_body.strip()  
         response.message(f"Motivo de la cita registrado: {session.reason}.")
-        session.stage = "confirm_appointment"  # Pasar a la etapa de confirmación de la cita
+        session.stage = "confirm_appointment"  
 
     async def save_appointment(self, session: Session,response: MessagingResponse) -> None:
             try:

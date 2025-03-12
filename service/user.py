@@ -5,10 +5,18 @@ from fastapi import Depends
 from schemas.userSch import UserResp,UserSch
 from models.user import User
 from service.crud import CRUDService
+from sqlalchemy.exc import NoResultFound
+from fastapi import HTTPException,status
 class UserService(CRUDService[User, UserSch, UserResp]):
     def __init__(self, db: Annotated[Session, Depends(get_db)]) -> None:
         super().__init__(model=User, response_schema=UserResp,db=db)
         
+        
+    def gey_by_dni(self, dni: str):
+        try:
+            return self.db.query(User).filter(User.dni == dni).first()
+        except NoResultFound as e:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
         
     def user_exist(self, email: str, dni: str) -> dict:
     # Buscar usuario por DNI

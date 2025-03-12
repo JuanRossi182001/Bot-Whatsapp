@@ -56,3 +56,12 @@ def update(user_id: int, user: UserSch, service: dependency):
         return service.update(id=user_id, obj_in=user)
     except NoResultFound as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    
+
+# get by dni
+@router.get("/dni/{dni}")
+def get_by_dni(dni: str, service: dependency):
+    try:
+        return service.gey_by_dni(dni=dni)
+    except NoResultFound as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))

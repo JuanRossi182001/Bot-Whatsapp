@@ -7,6 +7,7 @@ from fastapi.param_functions import Depends
 from config.db.connection import get_db
 from models.schedule import Schedule
 from datetime import datetime
+from sqlalchemy.exc import NoResultFound
 
 
 class AppointmentService(CRUDService[Appointment, AppointmentSch, AppointmentResp]):
@@ -14,7 +15,12 @@ class AppointmentService(CRUDService[Appointment, AppointmentSch, AppointmentRes
         super().__init__(model=Appointment, response_schema=AppointmentResp,db=db)
         
         
-        
+    def get_by_user_id(self, user_id: int):
+        _appointments = self.db.query(Appointment).filter(Appointment.user_id == user_id).all()
+        if not _appointments:
+            raise NoResultFound(f"Appointment with user_id {user_id} not found")
+        return [self.response_schema.model_validate(appointment) for appointment in _appointments]
+    
     def is_appointment_overlapping(self,doctor_id: int, appointment_date: datetime):
          overlapping_appointment = self.db.query(Appointment).filter(
              Appointment.doctor_id == doctor_id,

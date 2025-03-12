@@ -53,3 +53,10 @@ def update_appointment(appo_id: int, appointment: AppointmentSch, service: depen
     except NoResultFound as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
     
+
+@router.get("/id/{user_id}")
+def get_by_user_id(user_id: int, service: dependency):
+    try:
+        return service.get_by_user_id(user_id=user_id)
+    except NoResultFound as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
