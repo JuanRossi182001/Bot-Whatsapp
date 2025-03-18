@@ -5,6 +5,7 @@ from twilio.twiml.messaging_response import MessagingResponse
 from datetime import datetime, timedelta
 from models.session import Session
 from fastapi import HTTPException
+from models.stage import BotStage
 
 class BotService:
     def __init__(self,twilio_phone_number):
@@ -17,16 +18,16 @@ class BotService:
             "1. Sacar un nuevo turno.\n"
             "2. Ver mis futuros turnos."
         )
-        session.stage = "choose_action"
+        session.stage = BotStage.CHOOSE_ACTION
         
         
     def handle_choose_action(self, session: Session, response: MessagingResponse, message_body: str) -> None:
         if message_body.strip() == "1":
             response.message("Vamos a sacar un nuevo turno. Por favor, envíame tu nombre completo.")
-            session.stage = "ask_dni"  
+            session.stage = BotStage.ASK_DNI
         elif message_body.strip() == "2":
             response.message("Vamos a ver tus futuros turnos. Por favor, envíame tu DNI (solo los 8 números).")
-            session.stage = "ask_dni_for_appointments" 
+            session.stage = BotStage.ASK_DNI_FOR_APPOINTMENTS
         else:
             response.message("Opción no válida. Por favor, responde con '1' o '2'.")
             
@@ -80,10 +81,10 @@ class BotService:
                             ])
                             response.message(f"Tus citas futuras:\n{appointments_text}")
                             response.message("Gracias por usar nuestro servicio.")
-                            session.stage = "greet"
+                            session.stage = BotStage.GREET
                         else:
                             response.message("No tienes citas futuras.")
-                            session.stage = "greet"
+                            session.stage = BotStage.GREET
                     else:
                         response.message("Error al obtener las citas. Por favor, intenta de nuevo.")
             except HTTPException as e:
@@ -96,7 +97,7 @@ class BotService:
     def handle_ask_dni_stage(self, session: Session, response: MessagingResponse, message_body: str) -> None:
         session.name = message_body.strip()  
         response.message(f"Gracias, {session.name}. Por favor, envíame tu DNI (solo los 8 números).")
-        session.stage = "ask_email"  
+        session.stage = BotStage.ASK_EMAIL
         
     def handle_ask_email_stage(self, session: Session, response: MessagingResponse, message_body: str) -> None:
         dni = message_body.strip()
@@ -105,7 +106,7 @@ class BotService:
         if dni.isdigit() and len(dni) == 8:
             session.dni = dni  
             response.message("Por favor, envíame tu correo electrónico.")
-            session.stage = "register_user"  
+            session.stage = BotStage.REGISTER_USER 
         else:
             response.message("El DNI debe tener exactamente 8 dígitos. Por favor, inténtalo de nuevo.")
 
@@ -126,17 +127,17 @@ class BotService:
                 user_id = user_response.get("id")
                 session.user_id = user_id
                 response.message("Usuario registrado con éxito. Ahora elige un médico.")
-                session.stage = "select_doctor"
+                session.stage = BotStage.SELECT_DOCTOR
                 self.send_twilio_message(from_number, "Usuario registrado con éxito.")
                 await self.send_doctor_list(response, from_number)
             elif r.status_code == 400:
             # Error en la validación (DNI ya registrado pero email no coincide)
                 error_message = r.json().get("detail", "Error al registrar el usuario. Por favor, ingresa el email nuevamente.")
                 response.message(error_message)
-                session.stage = "ask_email"  # Volver a pedir el email
+                session.stage = BotStage.ASK_EMAIL  # Volver a pedir el email
             else:
                 response.message("Hubo un error al procesar tu solicitud. Por favor, inténtalo de nuevo más tarde.")
-                session.stage = "greet"  # Reiniciar el proceso
+                session.stage = BotStage.GREET  # Reiniciar el proceso
 
     async def send_doctor_list(self, response, from_number: str) -> None:
         async with httpx.AsyncClient() as http_client:
@@ -154,9 +155,9 @@ class BotService:
             # Obtener el stage actual
             current_stage = session.stage
 
-            if current_stage == "choose_day":
+            if current_stage == BotStage.CHOOSE_DAY:
                 await self.handle_day_selection(session, response, message_body, from_number)
-            elif current_stage == "choose_slot":
+            elif current_stage == BotStage.CHOOSE_SLOT:
                 await self.handle_slot_selection(session, response, message_body, from_number)
             else:
                 await self.handle_doctor_selection(session, response, message_body, from_number)
@@ -187,7 +188,7 @@ class BotService:
                     if r.status_code == 200:
                         appointment = r.json()
                         response.message(f"Cita confirmada para el {appointment['date']} con el Doctor ID: {appointment['doctor_id']}.")
-                        session["stage"] = "greet"  
+                        # session["stage"] = "greet"  
                     else:
                         response.message(f"Error al crear la cita: {r.text}")
             else:
@@ -229,7 +230,7 @@ class BotService:
                 schedules = r_schedules.json()
                 days_text = "\n".join([f"{i+1}. {schedule['day']}" for i, schedule in enumerate(schedules)])
                 response.message(f"Horarios disponibles para el Doctor {doctor_id}:\n{days_text}\nPor favor, responde con el número del día que deseas.")
-                session.stage = "choose_day"
+                session.stage = BotStage.CHOOSE_DAY
                 session.schedules = schedules  
                 print(schedules)
             elif r_schedules.status_code == 404:
@@ -251,7 +252,7 @@ class BotService:
             # Validar que hay schedules disponibles
             if not session.schedules:
                 response.message("❌ No hay horarios disponibles para este doctor.")
-                session.stage = "greet"
+                session.stage = BotStage.GREET
                 return
 
             # Validar índice del día
@@ -273,7 +274,7 @@ class BotService:
                 return
 
             session.slots = slots  
-            session.stage = "choose_slot"  
+            session.stage = BotStage.CHOOSE_SLOT  
 
             print(f"Selected Schedule: {selected_schedule}")
             print(f"Slots generados: {slots}")
@@ -297,7 +298,7 @@ class BotService:
                 selected_slot = slots[selected_slot_index]
                 session.selected_slot = selected_slot
                 response.message(f"Has seleccionado el slot: {selected_slot}. ¿Confirmas este horario? (Responde 'sí' o 'no').")
-                session.stage = "confirm_slot"  
+                session.stage = BotStage.CONFIRM_SLOT  
             else:
                 response.message("Número de horario no válido. Por favor, intenta de nuevo.")
         else:
@@ -308,10 +309,10 @@ class BotService:
         """Maneja la confirmación del slot seleccionado."""
         if message_body.strip().lower() in ["sí", "si", "s"]:
             response.message("Horario confirmado. Por favor, indica el motivo de la cita.")
-            session.stage = "get_reason"  
+            session.stage = BotStage.GET_REASON  
         elif message_body.strip().lower() in ["no", "n"]:
             response.message("Por favor, selecciona otro Horario.")
-            session.stage = "choose_slot"  
+            session.stage = BotStage.CHOOSE_SLOT  
         else:
             response.message("Respuesta no válida. Por favor, responde 'sí' o 'no'.")
 
@@ -335,7 +336,7 @@ class BotService:
         """Maneja la obtención del motivo de la cita."""
         session.reason = message_body.strip()  
         response.message(f"Motivo de la cita registrado: {session.reason}.")
-        session.stage = "confirm_appointment"  
+        session.stage = BotStage.CONFIRM_APPOINTMENT  
 
     async def save_appointment(self, session: Session,response: MessagingResponse) -> None:
             try:
@@ -390,7 +391,8 @@ class BotService:
                     
                     response.message(confirmation_message)
                 
-                
+                    session.stage = BotStage.GREET
+                    
             except HTTPException as e:
                 response.message(f"❌ Error: {e.detail}")
             except Exception as e:

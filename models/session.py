@@ -1,4 +1,5 @@
 from typing import Optional, List, Dict
+from models.stage import BotStage
 
 class Session:
     def __init__(
@@ -8,7 +9,7 @@ class Session:
         name: Optional[str] = None,
         email: Optional[str] = None,
         dni: Optional[str] = None,
-        stage: Optional[str] = None,
+        stage: Optional[BotStage] = None,
         schedules: Optional[List[Dict]] = None,
         selected_schedule: Optional[Dict] = None,
         slots: Optional[List[str]] = None,
@@ -21,7 +22,7 @@ class Session:
         self.name = name
         self.email = email
         self.dni = dni
-        self.stage = stage or "greet"  # Valor por defecto
+        self.stage = stage or BotStage.GREET # Valor por defecto
         self.schedules = schedules
         self.selected_schedule = selected_schedule
         self.slots = slots
@@ -37,7 +38,7 @@ class Session:
             "name": self.name,
             "email": self.email,
             "dni": self.dni,
-            "stage": self.stage,
+            "stage": self.stage.value if self.stage else None,
             "schedules": self.schedules,
             "selected_schedule": self.selected_schedule,
             "slots": self.slots,
@@ -55,7 +56,7 @@ class Session:
             name=data.get("name"),
             email=data.get("email"),
             dni=data.get("dni"),
-            stage=data.get("stage"),
+            stage=BotStage(data["stage"]) if data.get("stage") else BotStage.GREET,  # Convertir string a Enum
             schedules=data.get("schedules"),
             selected_schedule=data.get("selected_schedule"),
             slots=data.get("slots"),
