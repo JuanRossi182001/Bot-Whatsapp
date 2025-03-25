@@ -6,6 +6,7 @@ from datetime import datetime, timedelta
 from models.session import Session
 from fastapi import HTTPException
 from models.stage import BotStage
+from config.Redis.redisClient import redis_client
 
 class BotService:
     def __init__(self,twilio_phone_number):
@@ -156,9 +157,9 @@ class BotService:
             current_stage = session.stage
 
             if current_stage == BotStage.CHOOSE_DAY:
-                await self.handle_day_selection(session, response, message_body, from_number)
+                await self.handle_day_selection(session, response, message_body)
             elif current_stage == BotStage.CHOOSE_SLOT:
-                await self.handle_slot_selection(session, response, message_body, from_number)
+                await self.handle_slot_selection(session, response, message_body)
             else:
                 await self.handle_doctor_selection(session, response, message_body, from_number)
                 
@@ -241,7 +242,7 @@ class BotService:
                 response.message(f"Error al obtener los horarios: {r_schedules.text}")
 
 
-    async def handle_day_selection(self, session: Session, response: MessagingResponse, message_body: str,from_number: str) -> None:
+    async def handle_day_selection(self, session: Session, response: MessagingResponse, message_body: str) -> None:
         try:
             if not message_body.isdigit():
                 response.message("⚠️ Por favor, responde con el número del día.")
@@ -262,8 +263,35 @@ class BotService:
 
             # Obtener el horario seleccionado
             selected_schedule = session.schedules[selected_day_index]
-            session.selected_schedule = selected_schedule  
+            session.selected_schedule = selected_schedule
+            
+            # Obtener los slots ocupados desde Redis
+            occupied_slots_redis = redis_client.get_occupied_slots(
+                doctor_id=session.doctor_id,                                                 
+                date=selected_schedule["start_time"][:10]  # Extraer la fecha (YYYY-MM-DD)
+            )
 
+            # Obtener los slots ocupados en la DB
+            async with httpx.AsyncClient() as http_client:
+                r_appointments = await http_client.get(
+                    f"http://localhost:8000/appointments/doctor_id/{session.doctor_id}"
+                )
+                if r_appointments.status_code == 200:
+                    appointments = r_appointments.json()
+                    # Extraer las horas de las citas y convertirlas al formato de slot
+                    occupied_slots_db = set()
+                    for appointment in appointments:                                                   
+                        appointment_time = datetime.fromisoformat(appointment["date"])
+                        slot_start = appointment_time.strftime("%H:%M")
+                        slot_end = (appointment_time + timedelta(minutes=30)).strftime("%H:%M")
+                        slot = f"{slot_start} - {slot_end}"
+                        occupied_slots_db.add(slot)
+                else:
+                    occupied_slots_db = set()
+            
+            
+            
+            
             # Generar slots de tiempo (30 minutos)
             start_time = datetime.fromisoformat(selected_schedule["start_time"])
             end_time = datetime.fromisoformat(selected_schedule["end_time"])
@@ -272,15 +300,25 @@ class BotService:
             if not slots:
                 response.message("❌ No hay horarios disponibles para este día.")
                 return
+            
+            occupied_slots = occupied_slots_redis.union(occupied_slots_db)                               
+            
+            # Filtrar los slots ocupados
+            available_slots = [slot for slot in slots if slot not in occupied_slots]                     
 
-            session.slots = slots  
+            if not available_slots:
+                response.message("❌ No hay horarios disponibles para este día.")                         
+                return
+            
+
+            session.slots = available_slots                                             
             session.stage = BotStage.CHOOSE_SLOT  
 
             print(f"Selected Schedule: {selected_schedule}")
             print(f"Slots generados: {slots}")
 
             # Construir mensaje con los slots
-            slots_text = "\n".join([f"{i+1}. {slot}" for i, slot in enumerate(slots)])
+            slots_text = "\n".join([f"{i+1}. {slot}" for i, slot in enumerate(available_slots)])                     
             response.message(f"🕒 Horarios disponibles para el {selected_schedule['day']}:\n{slots_text}\nResponde con el número del horario que deseas.")
 
         except Exception as e:
@@ -288,7 +326,7 @@ class BotService:
             response.message("❌ Ocurrió un error. Por favor, intenta de nuevo.")
 
 
-    async def handle_slot_selection(self, session: Session, response: MessagingResponse, message_body: str, from_number: str) -> None:
+    async def handle_slot_selection(self, session: Session, response: MessagingResponse, message_body: str) -> None:
         """Maneja la selección del slot."""
         if message_body.isdigit():
             selected_slot_index = int(message_body) - 1
@@ -379,19 +417,28 @@ class BotService:
                     json=appointment_data
                     )
                     
+                    if response_endpoint.status_code == 200:
+                        appointment = response_endpoint.json()
+                        session.appointments = appointment
+
+                        # Guardar el slot ocupado en Redis
+                        redis_client.save_occupied_slot(
+                            doctor_id=doctor_id,
+                            date=appointment_date.isoformat(),
+                            slot=selected_slot
+                        )
+                        
+                        confirmation_message = self.format_appointment_message(session.appointments)
+                    
+                        response.message(confirmation_message)
+                
+                        session.stage = BotStage.GREET
+                    
+                        response_endpoint.raise_for_status()
                     
                     if response_endpoint.status_code == 409:
-                        raise HTTPException(status_code=409,detail=response.json()["detail"])
-                    response_endpoint.raise_for_status()
-                    
-                    session.appointments = response_endpoint.json()
-                    
-                    
-                    confirmation_message = self.format_appointment_message(session.appointments)
-                    
-                    response.message(confirmation_message)
-                
-                    session.stage = BotStage.GREET
+                        session.stage = BotStage.GREET 
+                        raise HTTPException(status_code=409,detail=response_endpoint.json()["detail"])
                     
             except HTTPException as e:
                 response.message(f"❌ Error: {e.detail}")

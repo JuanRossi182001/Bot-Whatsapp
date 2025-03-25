@@ -2,7 +2,7 @@ from fastapi import FastAPI,Depends,HTTPException,status
 from typing import Annotated
 from models.admin import Admin
 from routers import appointment,schedule,doctor,user,admin
-import prueba3
+import routers.prueba3 as prueba3
 from service.admin import get_current_admin
 
 

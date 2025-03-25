@@ -60,3 +60,12 @@ def get_by_user_id(user_id: int, service: dependency):
         return service.get_by_user_id(user_id=user_id)
     except NoResultFound as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    
+    
+@router.get("/doctor_id/{doctor_id}")
+def get_by_user_id(doctor_id: int, service: dependency):
+    try:
+        return service.get_by_doctor_id(doctor_id=doctor_id)
+    except NoResultFound as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) 
+    
