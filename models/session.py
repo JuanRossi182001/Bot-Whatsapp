@@ -12,6 +12,7 @@ class Session:
         stage: Optional[BotStage] = None,
         schedules: Optional[List[Dict]] = None,
         selected_schedule: Optional[Dict] = None,
+        selected_appointment_id: Optional[int] = None,
         slots: Optional[List[str]] = None,
         selected_slot: Optional[str] = None,
         appointments: Optional[List[Dict]] = None,
@@ -24,6 +25,7 @@ class Session:
         self.dni = dni
         self.stage = stage or BotStage.GREET # Valor por defecto
         self.schedules = schedules
+        self.selected_appointment_id = selected_appointment_id
         self.selected_schedule = selected_schedule
         self.slots = slots
         self.selected_slot = selected_slot
@@ -41,6 +43,7 @@ class Session:
             "stage": self.stage.value if self.stage else None,
             "schedules": self.schedules,
             "selected_schedule": self.selected_schedule,
+            "selected_appointment_id": self.selected_appointment_id,
             "slots": self.slots,
             "selected_slot": self.selected_slot,
             "appointments": self.appointments,
@@ -59,6 +62,7 @@ class Session:
             stage=BotStage(data["stage"]) if data.get("stage") else BotStage.GREET,  # Convertir string a Enum
             schedules=data.get("schedules"),
             selected_schedule=data.get("selected_schedule"),
+            selected_appointment_id=data.get("selected_appointment_id"),
             slots=data.get("slots"),
             selected_slot=data.get("selected_slot"),
             appointments=data.get("appointments"),

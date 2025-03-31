@@ -1,5 +1,6 @@
 import redis
 import json
+from typing import Dict, Any
 
 class RedisClient:
     def __init__(self):
@@ -7,20 +8,24 @@ class RedisClient:
             host="localhost",  # Docker expone Redis en localhost:6379
             port=6379,
             decode_responses=True,  # Convierte bytes a strings
-            password=None  
+            password=None  # Si configuraste una contraseña en Redis, colócala aquí
         )
 
     def save_session(self, from_number: str, session_data: dict, ttl: int = 86400):
         """Guarda la sesión en Redis con TTL (tiempo de expiración en segundos)."""
-        key = f"session:{from_number}"
-        self.client.execute_command("JSON.SET", key, "$", json.dumps(session_data))  # Guarda el JSON
-        self.client.expire(key, ttl)  # Aplica el tiempo de expiración
+        self.client.setex(
+            f"session:{from_number}",
+            ttl,
+            json.dumps(session_data)  # Convierte el diccionario a JSON
+        )
 
     def get_session(self, from_number: str) -> dict:
         """Obtiene la sesión desde Redis."""
-        key = f"session:{from_number}"
-        session_json = self.client.execute_command("JSON.GET", key)  # Obtiene el JSON
-        return json.loads(session_json) if session_json else {}  # Devuelve el JSON o un diccionario vacío
+        session_json = self.client.get(f"session:{from_number}")
+        if session_json:
+            return json.loads(session_json)
+        return {}  # Devuelve un diccionario vacío si no existe la sesión
+    
     
     
     

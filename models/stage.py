@@ -4,6 +4,9 @@ class BotStage(Enum):
     GREET = "greet"
     CHOOSE_ACTION = "choose_action"
     ASK_DNI_FOR_APPOINTMENTS = "ask_dni_for_appointments"
+    ASK_DNI_FOR_CANCEL = "ask_dni_for_cancel"
+    SELECT_APPOINTMENT_TO_CANCEL = "select_appointment_to_cancel"
+    CONFIRM_CANCELATION = "confirm_cancellation"
     ASK_DNI = "ask_dni"
     ASK_EMAIL = "ask_email"
     REGISTER_USER = "register_user"
@@ -13,3 +16,4 @@ class BotStage(Enum):
     CONFIRM_SLOT = "confirm_slot"
     GET_REASON = "get_reason"
     CONFIRM_APPOINTMENT = "confirm_appointment"
+    

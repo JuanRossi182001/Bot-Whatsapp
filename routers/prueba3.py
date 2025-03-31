@@ -27,6 +27,9 @@ STAGE_HANDLERS = {
     BotStage.GREET: bot_service.handle_greet_stage,
     BotStage.CHOOSE_ACTION: bot_service.handle_choose_action,
     BotStage.ASK_DNI_FOR_APPOINTMENTS: bot_service.handle_ask_dni_for_appointments,
+    BotStage.ASK_DNI_FOR_CANCEL: bot_service.handle_ask_dni_for_cancel_appointments,
+    BotStage.SELECT_APPOINTMENT_TO_CANCEL: bot_service.handle_select_appointment_to_cancel,
+    BotStage.CONFIRM_CANCELATION: bot_service.handle_confirm_cancellation,
     BotStage.ASK_DNI: bot_service.handle_ask_dni_stage,
     BotStage.ASK_EMAIL: bot_service.handle_ask_email_stage,
     BotStage.REGISTER_USER: bot_service.handle_register_user_stage,
@@ -52,8 +55,10 @@ async def bot_webhook(request: Request):
     response = MessagingResponse()
     
     # 1. Recuperar sesión desde Redis
+    print(f"Recuperando sesión para {from_number}")
     session_data = redis_client.get_session(from_number=from_number)
     session = Session.from_dict(session_data)
+    print(f"Datos obtenidos de Redis: {session_data}")  # ⚠️ ¿Devuelve None o {}?
     
     
     # 2. Llamar al handler correspondiente según el stage
@@ -78,8 +83,9 @@ async def bot_webhook(request: Request):
     except Exception as e:
         response.message("Lo siento, ocurrió un error. Inténtalo de nuevo más tarde.")
         print(f"Error en el bot: {e}")
+
         
-        
+    
     # 3. Guardar la sesión actualizada en Redis (TTL de 24 horas)
     redis_client.save_session(from_number, session.to_dict())
     

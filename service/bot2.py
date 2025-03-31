@@ -17,7 +17,8 @@ class BotService:
         response.message(
             "Hola, soy tu asistente virtual. ¿Qué deseas hacer?\n"
             "1. Sacar un nuevo turno.\n"
-            "2. Ver mis futuros turnos."
+            "2. Ver mis turnos.\n"
+            "3. Cancelar un turno"
         )
         session.stage = BotStage.CHOOSE_ACTION
         
@@ -29,6 +30,9 @@ class BotService:
         elif message_body.strip() == "2":
             response.message("Vamos a ver tus futuros turnos. Por favor, envíame tu DNI (solo los 8 números).")
             session.stage = BotStage.ASK_DNI_FOR_APPOINTMENTS
+        elif message_body.strip() == "3":
+            response.message("Vamos a cancelar un turno. Por favor, envíame tu DNI (solo los 8 números).")
+            session.stage = BotStage.ASK_DNI_FOR_CANCEL # no existe
         else:
             response.message("Opción no válida. Por favor, responde con '1' o '2'.")
             
@@ -46,12 +50,14 @@ class BotService:
             
     async def handle_ask_dni_for_appointments(self, session: Session, response: MessagingResponse, message_body: str) -> None:
         dni = message_body.strip()
-
+        
         # Validar que el DNI tenga 8 dígitos
         if dni.isdigit() and len(dni) == 8:
             try:
+                session.dni = dni
                 # Obtener el user_id asociado al DNI
                 user_id = await self.get_user_id_by_dni(dni)
+                session.user_id = user_id
                 
                 
                 # Obtener las citas futuras usando el endpoint
@@ -60,6 +66,7 @@ class BotService:
                     
                     if r_appointments.status_code == 200:
                         appointments = r_appointments.json()
+                        session.appointments = appointments
                         if appointments:
                             # Obtener los nombres de los doctores para cada cita
                             appointments_with_doctor_names = []
@@ -94,6 +101,165 @@ class BotService:
                 response.message("❌ Ocurrió un error. Por favor, intenta de nuevo.")
         else:
             response.message("El DNI debe tener exactamente 8 dígitos. Por favor, inténtalo de nuevo.")
+            
+    async def handle_ask_dni_for_cancel_appointments(self, session: Session, response: MessagingResponse, message_body: str) -> None:
+        dni = message_body.strip()
+
+        # Validar que el DNI tenga 8 dígitos
+        if dni.isdigit() and len(dni) == 8:
+            try:
+                session.dni = dni
+                # Obtener el user_id asociado al DNI
+                user_id = await self.get_user_id_by_dni(dni)
+                session.user_id = user_id
+                
+                
+                
+                # Obtener las citas futuras usando el endpoint
+                async with httpx.AsyncClient() as http_client:
+                    r_appointments = await http_client.get(f"http://localhost:8000/appointments/id/{user_id}")
+                    
+                    
+                    
+                    if r_appointments.status_code == 200:
+                        appointments = r_appointments.json()
+                        session.appointments = appointments
+                        if appointments:
+                            # Obtener los nombres de los doctores para cada cita
+                            appointments_with_doctor_names = []
+                            for appointment in appointments:
+                                r_doctor = await http_client.get(f"http://localhost:8000/doctors/{appointment['doctor_id']}")
+                                if r_doctor.status_code == 200:
+                                    doctor_data = r_doctor.json()
+                                    appointment["doctor_name"] = doctor_data.get("name", "Desconocido")
+                                else:
+                                    appointment["doctor_name"] = "Desconocido"
+                                appointments_with_doctor_names.append(appointment)
+
+                            # Formatear las citas para mostrarlas al usuario
+                            appointments_text = "\n".join([
+                                f"📅 Cita {i+1}:\n"
+                                f"📅 Fecha: {appointment['date']}\n"
+                                f"👨🏼‍⚕️ Doctor: {appointment['doctor_name']}\n"
+                                f"📝 Motivo: {appointment['reason']}\n"
+                                for i, appointment in enumerate(appointments_with_doctor_names)
+                            ])
+                            response.message(f"Turnos:\n{appointments_text}")
+                            response.message("indique el numero de la cita que desea cancelar.")
+                            session.stage = BotStage.SELECT_APPOINTMENT_TO_CANCEL 
+                        else:
+                            response.message("Error al obtener citas.")
+                            session.stage = BotStage.GREET
+                    elif r_appointments.status_code == 404:
+                        response.message("No tienes citas futuras.")
+                        session.stage = BotStage.GREET
+            except HTTPException as e:
+                response.message(f"❌ {e.detail}")
+            except Exception as e:
+                response.message("❌ Ocurrió un error. Por favor, intenta de nuevo.")
+        else:
+            response.message("El DNI debe tener exactamente 8 dígitos. Por favor, inténtalo de nuevo.")
+            
+
+    async def handle_select_appointment_to_cancel(self, session: Session, response: MessagingResponse, message_body: str) -> None:
+        """Handles the selection of an appointment to cancel."""
+        try:
+            if not message_body.isdigit():
+                response.message("⚠️ Por favor, responde con el número de la cita que deseas cancelar.")
+                return
+
+            appointment_index = int(message_body) - 1  # Convert to 0-based index
+            
+            # Get user's appointments from session or API
+            
+            appointments = session.appointments
+            if appointments:
+                    # Validate appointment index
+                    if 0 <= appointment_index < len(appointments):
+                        selected_appointment = appointments[appointment_index]
+                        session.selected_appointment_id = selected_appointment['id'] # TENER CUIDADO WE
+                        
+                        # Get doctor details for confirmation message
+                        async with httpx.AsyncClient() as http_client:
+                            r_doctor = await http_client.get(f"http://localhost:8000/doctors/{selected_appointment['doctor_id']}")
+                            doctor_name = r_doctor.json().get('name', 'Desconocido') if r_doctor.status_code == 200 else 'Desconocido'
+                            
+                            response.message(
+                                f"⚠️ ¿Estás seguro que deseas cancelar esta cita?\n\n"
+                                f"📅 Fecha: {selected_appointment['date']}\n"
+                                f"👨‍⚕️ Doctor: {doctor_name}\n"
+                                f"📝 Motivo: {selected_appointment['reason']}\n\n"
+                                "Responde 'SÍ' para confirmar o 'NO' para volver atrás."
+                            )
+                            session.stage = BotStage.CONFIRM_CANCELATION
+                    else:
+                        response.message("❌ Número de cita inválido. Por favor, elige un número de la lista.")
+            else:
+                response.message("❌ Error al obtener tus citas. Por favor, intenta de nuevo.")
+                session.stage = BotStage.GREET
+                    
+        except Exception as e:
+            print(f"Error in handle_select_appointment_to_cancel: {str(e)}")
+            response.message("❌ Ocurrió un error. Por favor, intenta de nuevo.")
+            session.stage = BotStage.GREET
+            
+            
+    async def handle_confirm_cancellation(self, session: Session, response: MessagingResponse, message_body: str) -> None:
+        """Handles the actual cancellation of the selected appointment."""
+        try:
+            user_response = message_body.strip().lower()
+            
+            if user_response in ['sí', 'si', 's']:
+                if not hasattr(session, 'selected_appointment_id'):
+                    response.message("❌ No se encontró la cita seleccionada.")
+                    session.stage = BotStage.GREET
+                    return
+                    
+                    
+                # get appointment from database
+                async with httpx.AsyncClient() as http_client:
+                    r_appointment = await http_client.get(f"http://localhost:8000/appointments/{session.selected_appointment_id}")
+                    
+                    if r_appointment.status_code == 200:
+                        
+                        appointment_data = r_appointment.json()
+                        appointment_date = datetime.fromisoformat(appointment_data['date']).date()
+                        slot_start = datetime.fromisoformat(appointment_data['date']).strftime("%H:%M")
+                        slot_end = (datetime.fromisoformat(appointment_data['date']) + timedelta(minutes=30)).strftime("%H:%M")
+                        slot = f"{slot_start} - {slot_end}"
+                        
+                        redis_client.remove_occupied_slot(
+                            doctor_id=appointment_data['doctor_id'],
+                            date=appointment_date.isoformat(),
+                            slot=slot
+                        )        
+                    
+                # Delete appointment from database
+                async with httpx.AsyncClient() as http_client:
+                    delete_response = await http_client.delete(
+                        f"http://localhost:8000/appointments/delete/{session.selected_appointment_id}"
+                    )
+                    
+                    
+                    if delete_response.status_code == 200:
+                        response.message("✅ Tu cita ha sido cancelada exitosamente.")
+                    else:
+                        response.message(f"❌ Error al cancelar la cita: {delete_response.text}")
+            elif user_response in ['no', 'n']:
+                response.message("✅ La cancelación ha sido cancelada. No se realizaron cambios.")
+            else:
+                response.message("⚠️ Por favor, responde 'SÍ' para confirmar o 'NO' para cancelar.")
+                return
+                
+            session.stage = BotStage.GREET
+            
+            
+        except Exception as e:
+            print(f"Error in handle_confirm_cancellation: {str(e)}")
+            response.message("❌ Ocurrió un error al procesar la cancelación.")
+            session.stage = BotStage.GREET
+            
+            
         
     def handle_ask_dni_stage(self, session: Session, response: MessagingResponse, message_body: str) -> None:
         session.name = message_body.strip()  
