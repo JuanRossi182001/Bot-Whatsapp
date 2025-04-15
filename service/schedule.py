@@ -6,6 +6,8 @@ from schemas.scheduleSch import ScheduleResp,ScheduleSch
 from models.schedule import Schedule
 from service.crud import CRUDService
 from sqlalchemy.exc import NoResultFound
+from datetime import datetime
+
 
 
 class ScheduleService(CRUDService[Schedule, ScheduleSch, ScheduleResp]):
@@ -25,7 +27,12 @@ class ScheduleService(CRUDService[Schedule, ScheduleSch, ScheduleResp]):
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
     
     
-    
+    def delete_old_schedules(self):
+        today = datetime.now()
+        self.db.query(Schedule).filter(Schedule.start_time < today).delete()
+        self.db.commit()
+        print(f"Deleted schedules older than {today}")
+        
     
             
         

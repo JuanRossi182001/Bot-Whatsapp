@@ -1,0 +1,82 @@
+version: '3.8'
+
+services:
+  # --- FastAPI Backend ---
+  backend:
+    build:
+      context: .
+      target: fastapi  # Usa la etapa 'fastapi' del Dockerfile
+    container_name: fastapi_app
+    ports:
+      - "8000:8000"
+    env_file:
+      - variables.env  # Archivo compartido para variables
+    depends_on:
+      db:
+        condition: service_healthy  # Espera a que PostgreSQL esté listo
+      redis:
+        condition: service_started
+    volumes:
+      - ./app:/app/app  # Monta el código (opcional para desarrollo)
+    networks:
+      - app-network
+
+  # --- PostgreSQL Database ---
+  db:
+    image: postgres:15
+    container_name: postgres_db
+    env_file:
+      - variables.env
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - pg_data:/var/lib/postgresql/data  # Volumen persistente
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - app-network
+
+  # --- Redis ---
+  redis:
+    image: redis:7.2-alpine  # Versión ligera
+    container_name: redis_cache
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data  # Persistencia de datos
+    command: redis-server --save 60 1 --loglevel warning  # Config básica
+    networks:
+      - app-network
+
+  # --- Celery Worker ---
+  celery:
+    build:
+      context: .
+      target: celery  # Usa la etapa 'celery' del Dockerfile
+    container_name: celery_worker
+    env_file:
+      - variables.env
+    depends_on:
+      redis:
+        condition: service_started
+    command: celery -A config.Celery.celery_worker.celery_app worker --loglevel=info --concurrency=1 --pool=solo
+    volumes:
+      - ./app:/app/app  # Opcional para desarrollo
+    networks:
+      - app-network
+
+# --- Volúmenes y Redes ---
+volumes:
+  pg_data:  # PostgreSQL
+  redis_data:  # Redis
+
+networks:
+  app-network:
+    driver: bridge

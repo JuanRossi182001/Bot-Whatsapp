@@ -1,8 +1,14 @@
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.ext.declarative import declarative_base
+from dotenv import load_dotenv
+import os
 
-DATABASE_URL = "postgresql+psycopg2://postgres:holagente56@localhost:5432/ChatBot"
+load_dotenv('variables.env')
+
+database_url = os.getenv("DATABASE_URL")
+
+DATABASE_URL = database_url
 
 engine = create_engine(DATABASE_URL)
 sessionlocal = sessionmaker(autocommit = False, autoflush = False, bind = engine)
